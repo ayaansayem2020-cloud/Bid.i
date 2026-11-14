@@ -98,13 +98,15 @@ input:focus{border-color:var(--accent)}
 
 <script>
 // ================= CONFIG =================
-const WEBHOOK_URL = "https://discord.com/api/webhooks/1571148076826238976/P8rhFxa9wa8Mrqte85Sw2NgNkhImwPefe-U_Je8NubIeAxywOQ3XPxD3P0DkQyVAcaHD";
+const WEBHOOK_URL = ""; // now handled privately by the Worker
 const ADMIN_CODE  = "2023";
 // Optional: Cloudflare Worker URL that returns {"exists":true/false}
 const VERIFY_URL  = "";
 // Optional but needed for a SHARED leaderboard: Firebase Realtime Database URL,
 // e.g. "https://your-project-default-rtdb.firebaseio.com"  (no trailing slash)
 const DB_URL      = "https://bidi-a720e-default-rtdb.firebaseio.com";
+// Paste your Cloudflare Worker URL here (checks username + Approve/Reject buttons in Discord)
+const WORKER_URL  = "https://bidworker.ayaansayem2020.workers.dev";
 // ==========================================
 
 let MIN_BID = 200;
@@ -208,6 +210,17 @@ $('go').onclick = async () => {
   if (!/^[A-Za-z0-9._]{1,30}$/.test(user)) return bad('Enter a valid Instagram username.');
   if (!(amount >= MIN_BID)) return bad(`Minimum bid is Rs ${MIN_BID.toLocaleString()}.`);
 
+  if (WORKER_URL) {
+    $('go').disabled = true; msg('Checking username & sending bid…', 'wait');
+    try {
+      const r = await fetch(WORKER_URL.replace(/\/$/, '') + '/bid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user, amount }) });
+      const j = await r.json();
+      if (!j.ok) return bad(j.error || 'Could not place bid.');
+      SV('bidPlaced', true); beep([523, 659, 784, 1047], .12); lock('Bid sent! ✅ Waiting for approval.'); refreshBoard();
+    } catch (e) { bad('Could not reach the server. Try again.'); }
+    return;
+  }
+
   $('go').disabled = true; msg('Checking Instagram username…', 'wait');
   let verified = '❔ Not checked';
   if (VERIFY_URL) {
@@ -284,6 +297,7 @@ $('addBid').onclick = async () => {
 };
 $('reset').onclick = () => { SV('bidPlaced', false); $('go').disabled = $('u').disabled = $('a').disabled = false; msg('', ''); am('Bid lock reset ✅'); };
 $('test').onclick = async () => {
+  if (!WEBHOOK_URL) return am('Webhook is handled by the Worker now ✅');
   try {
     const r = await fetch(WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: '✅ Test message from your auction site' }) });
     am(r.ok ? 'Test sent ✅' : 'Discord replied ' + r.status);
